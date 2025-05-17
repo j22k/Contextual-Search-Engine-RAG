@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web RAG Chat Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-robot"></i> Web RAG Assistant</h1>
+            <p>Ask me anything and I'll search the web for you!</p>
+        </header>
+        
+        <main>
+            <div class="chat-container" id="chat-container">
+                <div class="message system-message">
+                    <div class="message-content">
+                        <p>Hello! I'm your Web RAG assistant. Ask me any question and I'll search the internet to find you the best answer. Try me!</p>
+                    </div>
+                </div>
+                <!-- Messages will be added here dynamically -->
+            </div>
+            
+            <div class="input-container">
+                <textarea id="user-input" placeholder="Type your question here..." rows="2"></textarea>
+                <button id="send-button" title="Send message">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </main>
+        
+        <div class="loading-container" id="loading-container">
+            <div class="loading-indicator">
+                <i class="fas fa-circle-notch fa-spin"></i>
+                <p>Searching the web for your answer...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+/* styles.css */
+:root {
+    --primary-color: #4a6fa5;
+    --secondary-color: #6c9bcf;
+    --background-color: #f8f9fa;
+    --chat-bg: #ffffff;
+    --user-message-bg: #e9f3ff;
+    --system-message-bg: #f2f2f2;
+    --text-color: #333333;
+    --light-text: #666666;
+    --border-color: #e1e4e8;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --accent-color: #5a8dee;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+header h1 {
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+header p {
+    color: var(--light-text);
+}
+
+main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.chat-container {
+    flex: 1;
+    background-color: var(--chat-bg);
+    border-radius: 10px;
+    padding: 15px;
+    overflow-y: auto;
+    box-shadow: 0 2px 10px var(--shadow-color);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.message {
+    display: flex;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    padding: 12px 15px;
+    max-width: 85%;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.user-message {
+    background-color: var(--user-message-bg);
+    align-self: flex-end;
+}
+
+.system-message {
+    background-color: var(--system-message-bg);
+    align-self: flex-start;
+}
+
+.message-content {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.message-content p {
+    margin: 0;
+}
+
+.source-list {
+    margin-top: 10px;
+    font-size: 0.9em;
+    color: var(--light-text);
+    border-top: 1px dashed var(--border-color);
+    padding-top: 8px;
+}
+
+.source-list h4 {
+    margin-bottom: 5px;
+    color: var(--primary-color);
+}
+
+.source-list ul {
+    padding-left: 20px;
+}
+
+.source-list li {
+    margin-bottom: 3px;
+}
+
+.source-list li a {
+    color: var(--accent-color);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    max-width: 400px;
+}
+
+.source-list li a:hover {
+    text-decoration: underline;
+}
+
+.input-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+textarea {
+    flex: 1;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    resize: none;
+    font-size: 16px;
+    box-shadow: 0 2px 5px var(--shadow-color);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+textarea:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 8px rgba(90, 141, 238, 0.3);
+}
+
+button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    width: 50px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: var(--accent-color);
+}
+
+button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+.loading-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    display: none;
+}
+
+.loading-indicator {
+    background-color: white;
+    padding: 20px 30px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.loading-indicator i {
+    font-size: 2rem;
+    color: var(--primary-color);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsiveness */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .message {
+        max-width: 90%;
+    }
+    
+    .source-list li a {
+        max-width: 250px;
+    }
+}
