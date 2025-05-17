@@ -3,32 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web RAG Chat Interface</title>
+    <title>Web RAG Assistant</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.ico') }}">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1><i class="fas fa-robot"></i> Web RAG Assistant</h1>
-            <p>Ask me anything and I'll search the web for you!</p>
+            <div class="logo">
+                <i class="fas fa-globe"></i>
+                <h1>Web RAG Assistant</h1>
+            </div>
+            <p>Ask me anything and I'll search the web for you</p>
         </header>
         
         <main>
             <div class="chat-container" id="chat-container">
-                <div class="message system-message">
-                    <div class="message-content">
-                        <p>Hello! I'm your Web RAG assistant. Ask me any question and I'll search the internet to find you the best answer. Try me!</p>
-                    </div>
-                </div>
                 <!-- Messages will be added here dynamically -->
             </div>
             
             <div class="input-container">
-                <textarea id="user-input" placeholder="Type your question here..." rows="2"></textarea>
-                <button id="send-button" title="Send message">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
+                <div class="input-wrapper">
+                    <textarea id="user-input" placeholder="Type your question here..." rows="1"></textarea>
+                    <button class="send-button" id="send-button" title="Send message">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
             </div>
         </main>
         
