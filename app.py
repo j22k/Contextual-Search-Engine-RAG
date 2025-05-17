@@ -17,6 +17,19 @@ from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.schema import Document
 from langchain.prompts import PromptTemplate
 
+# Import torch to check for CUDA availability for embeddings
+try:
+    import torch
+    print("Successfully imported torch.")
+    TORCH_AVAILABLE = True
+except ImportError:
+    print("Warning: torch not installed. CUDA will not be available for embeddings.")
+    TORCH_AVAILABLE = False
+except Exception as e:
+     print(f"Warning: Failed to import torch: {e}. CUDA will not be available for embeddings.")
+     TORCH_AVAILABLE = False
+
+
 app = Flask(__name__)
 
 # --- Configuration ---
@@ -24,52 +37,54 @@ app = Flask(__name__)
 SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "26fafe1d19be94686816682af49236ff5538ad76") # Replace with your actual key or ensure env var is set
 # --- Ollama Configuration ---
 # Specify the name of the Ollama model you want to use (e.g., mistral, llama2, phi3)
-OLLAMA_MODEL_NAME = os.environ.get("OLLAMA_MODEL_NAME", "mistral") 
+OLLAMA_MODEL_NAME = os.environ.get("OLLAMA_MODEL_NAME", "mistral")
 # Optional: Specify the base URL for the Ollama server if it's not localhost:11434
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
+# Embedding model name
 EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 
+# Determine the device for embeddings (CPU or CUDA)
+EMBEDDING_DEVICE = 'cpu'
+if TORCH_AVAILABLE and torch.cuda.is_available():
+    EMBEDDING_DEVICE = 'cuda'
+    print(f"CUDA is available. Embedding model will use device: {EMBEDDING_DEVICE}")
+elif TORCH_AVAILABLE:
+     print("torch installed, but CUDA is not available. Embedding model will use device: cpu")
+else:
+     print("torch not installed. Embedding model will use device: cpu")
+
+
 # Setup callback manager for server-side logging (optional with Ollama API)
-# It won't stream to the client in this basic setup, but shows progress in server console.
 callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
 
 def search_with_serper(query, gl="us", hl="en", num_results=7):
     """
     Perform a search using the Serper API
-    
-    Args:
-        query (str): The search query
-        gl (str): Geolocation code (e.g., 'us', 'in')
-        hl (str): Host language (e.g., 'en')
-        num_results (int): Number of results to return
-    
-    Returns:
-        dict: The search results or None if error occurs
     """
     url = "https://google.serper.dev/search"
-    
+
     payload = json.dumps({
         "q": query,
         "gl": gl,
         "hl": hl,
         "num": num_results
     })
-    
+
     headers = {
         'X-API-KEY': SERPER_API_KEY,
         'Content-Type': 'application/json'
     }
-    
+
     if not SERPER_API_KEY or SERPER_API_KEY == "YOUR_SERPER_API_KEY":
          print("WARNING: SERPER_API_KEY is not set. Search will fail.")
          return None
-         
+
     try:
         response = requests.post(url, headers=headers, data=payload)
         response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
         return response.json()
-    
+
     except requests.exceptions.RequestException as e:
         print(f"Error making Serper API request: {e}")
         return None
@@ -83,13 +98,13 @@ def get_urls_from_serper(query: str, num_results: int = 7) -> list[str]:
     if not results:
         print("Serper search failed or returned no results.")
         return []
-        
+
     urls = []
-    
+
     # Get URLs from organic results
     if 'organic' in results:
         urls.extend([res['link'] for res in results['organic'] if 'link' in res])
-        
+
     # Get URL from answer box if available - often redundant but good practice
     if 'answerBox' in results and 'link' in results['answerBox']:
          # Check if the link is already in organic results to avoid immediate duplicates
@@ -154,11 +169,11 @@ def fetch_and_process_url(url: str) -> list[Document]:
             chunk_overlap=200,
             separators=["\n\n", "\n", ". ", " ", ""] # Prioritize splitting by paragraphs, then lines, then sentences, etc.
         )
-        
+
         # Split text into chunks
         chunks = text_splitter.split_text(text)
         print(f"Created {len(chunks)} chunks from {url}")
-        
+
         # Create Document objects
         docs = [Document(page_content=chunk, metadata={"source": url}) for chunk in chunks]
         return docs
@@ -177,15 +192,15 @@ def fetch_and_process_url(url: str) -> list[Document]:
 def fetch_and_process_urls(urls: list[str]) -> list[Document]:
     """Fetches content from multiple URLs, extracts text, and chunks it."""
     all_docs = []
-    
+
     # Process a limited number of URLs to avoid excessive fetching
     # For web search, 5-7 good sources are usually sufficient
     urls_to_process = urls[:7] # Limit to first 7 URLs
-    
+
     for url in urls_to_process:
         docs = fetch_and_process_url(url)
         all_docs.extend(docs)
-        
+
     print(f"Total documents created: {len(all_docs)}")
     return all_docs
 
@@ -194,22 +209,39 @@ def create_vector_store(docs: list[Document]):
     if not docs:
         print("No documents to create vector store from.")
         return None
-        
-    print(f"Creating vector store with {len(docs)} documents")
+
+    print(f"Creating vector store with {len(docs)} documents using device: {EMBEDDING_DEVICE}")
     try:
-        # Initialize embeddings model
-        embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME)
-        # If using langchain-huggingface:
-        # embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+        # Initialize embeddings model, using the determined device (CUDA or CPU)
+        # The model_kwargs dictionary is passed directly to the SentenceTransformer constructor
+        embeddings = SentenceTransformerEmbeddings(
+            model_name=EMBEDDING_MODEL_NAME,
+            model_kwargs={'device': EMBEDDING_DEVICE} # Use determined device
+        )
 
         # Create vector store from documents
+        # Chroma might also use torch/numpy internally, but the main GPU work
+        # for insertion is done by the embeddings model itself.
         vectorstore = Chroma.from_documents(documents=docs, embedding=embeddings)
         print("Vector store created successfully.")
         return vectorstore
-        
+
     except Exception as e:
         print(f"Error creating vector store: {e}")
-        return None
+        # Try again with smaller batches if it's a memory error
+        # This primarily helps if the embedding step runs out of CPU/GPU memory
+        try:
+            print("Retrying vector store creation with smaller batch size...")
+            vectorstore = Chroma.from_documents(
+                documents=docs,
+                embedding=embeddings,
+                batch_size=32  # Smaller batch size
+            )
+            print("Vector store created successfully with smaller batch size.")
+            return vectorstore
+        except Exception as retry_error:
+            print(f"Second attempt failed: {retry_error}")
+            return None
 
 def setup_rag_chain(vectorstore):
     """Sets up the RAG chain using the vector store and Ollama model."""
@@ -218,34 +250,31 @@ def setup_rag_chain(vectorstore):
         return None
 
     try:
+        # Note: ChatOllama connects to the Ollama server.
+        # GPU usage happens *within* the Ollama server process,
+        # not controlled directly by this Python code,
+        # provided Ollama is installed/configured for your GPU.
         print(f"Loading Ollama model '{OLLAMA_MODEL_NAME}' from {OLLAMA_BASE_URL}")
-        # Use ChatOllama for instruct models like Mistral
         llm = ChatOllama(
             model=OLLAMA_MODEL_NAME,
             base_url=OLLAMA_BASE_URL,
             temperature=0.1,
-            # Ollama parameters often map like:
-            # max_tokens -> num_predict
-            # n_ctx -> num_ctx
-            num_predict=1000, # Max tokens to generate
-            num_ctx=4096,     # Context window size (adjust based on your model's capability)
-            # Optional: Enable streaming callbacks for server-side logging
-            # callbacks=callback_manager, # Handled by RetrievalQA chain if streaming=True (not doing streaming here)
-            # verbose=False # Suppress detailed logging from Langchain components if needed
+            num_predict=1000,
+            num_ctx=4096,
+            # callbacks=callback_manager, # Use if you need server-side streaming logs
         )
         print("Ollama model loaded successfully.")
 
     except Exception as e:
         print(f"Error loading Ollama model or connecting to server: {e}")
         print(f"Please ensure Ollama server is running at {OLLAMA_BASE_URL}")
-        print(f"Also ensure the model '{OLLAMA_MODEL_NAME}' is pulled (run 'ollama pull {OLLAMA_MODEL_NAME}' in your terminal)")
+        print(f"Also ensure the model '{OLLAMA_MODEL_NAME}' is pulled (run 'ollama pull {OLLAMA_MODEL_NAME}' in your terminal) AND that your Ollama installation is configured to use your GPU.")
         return None
 
     # Setup the retriever
     retriever = vectorstore.as_retriever(search_kwargs={"k": 5}) # Retrieve top 5 most relevant chunks
 
     # Prompt template that instructs the model to cite sources
-    # This template format is compatible with Mistral/Llama Instruct style
     template = """[INST] Use the following pieces of context to answer the user's question.
 If you don't know the answer based on the context provided, just say that you don't know.
 Do not make up an answer.
@@ -267,15 +296,14 @@ User question: {question} [/INST]"""
     try:
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
-            chain_type="stuff", # 'stuff' fits all context into one prompt (suitable for smaller contexts)
+            chain_type="stuff",
             retriever=retriever,
             return_source_documents=True, # Return source documents for citation
             chain_type_kwargs={"prompt": custom_rag_prompt}
-            # Set streaming=True here if you wanted token-by-token output (requires backend changes)
         )
         print("RAG chain setup complete.")
         return qa_chain
-        
+
     except Exception as e:
         print(f"Error setting up RetrievalQA chain: {e}")
         return None
@@ -284,7 +312,7 @@ User question: {question} [/INST]"""
 def answer_question_with_web_search(query: str):
     """Combines all steps to answer a question using web search RAG."""
     print(f"\n--- Processing query: {query} ---")
-    
+
     # 1. Get URLs from Serper
     urls = get_urls_from_serper(query)
     if not urls:
@@ -310,20 +338,19 @@ def answer_question_with_web_search(query: str):
     # 5. Run the RAG chain
     try:
         print("Running RAG chain to generate answer")
-        # Use a dictionary input for the query
         result = qa_chain({"query": query})
-        
+
         answer = result.get("result", "No answer generated by the model.")
         source_documents = result.get("source_documents", [])
 
         # Extract and deduplicate sources from source_documents metadata
         sources = sorted(list(set([doc.metadata['source'] for doc in source_documents if 'source' in doc.metadata])))
-        
+
         print(f"Answer generated. Used {len(source_documents)} source chunks from {len(sources)} unique sources.")
         print(f"Sources used: {sources}")
 
         return {"answer": answer, "sources": sources}
-        
+
     except Exception as e:
         print(f"Error in RAG chain execution: {e}")
         # Provide a more specific error message about the LLM if possible
@@ -337,10 +364,10 @@ def index():
 def ask():
     data = request.json
     question = data.get("question", "")
-    
+
     if not question:
         return jsonify({"error": "No question provided"}), 400
-    
+
     result = answer_question_with_web_search(question)
     return jsonify(result)
 
@@ -359,16 +386,16 @@ if __name__ == "__main__":
     print("--- Starting RAG Flask Application ---")
     print(f"Using Ollama Model: {OLLAMA_MODEL_NAME} at {OLLAMA_BASE_URL}")
     print(f"Using Embedding Model: {EMBEDDING_MODEL_NAME}")
-    
+    print(f"Embedding device set to: {EMBEDDING_DEVICE}") # Report the chosen device
+
     if not SERPER_API_KEY or SERPER_API_KEY == "YOUR_SERPER_API_KEY":
          print("\n!!! WARNING: SERPER_API_KEY is not set or is using the placeholder value.")
          print("!!! Web search functionality will not work.")
          print("!!! Set the SERPER_API_KEY environment variable or replace the placeholder.")
-         
+
     print("\nAttempting to connect to Ollama server and load model...")
     # Basic check: Try initializing the ChatOllama instance.
-    # This might not catch *all* errors (e.g., model not pulled) but is a start.
-    # The actual error is more likely during the first call to the model.
+    # This doesn't guarantee GPU usage, that's an Ollama server detail.
     try:
         test_llm = ChatOllama(
             model=OLLAMA_MODEL_NAME,
@@ -377,12 +404,13 @@ if __name__ == "__main__":
         )
         # Optional: Make a tiny test call - more reliable but adds delay
         # test_llm.invoke("Hi", max_tokens=5)
-        print("Ollama initialization successful. Model *might* be ready.")
-        print("The first user query will perform a more thorough check.")
+        print("Ollama initialization successful. Model *might* be ready and potentially using GPU if configured.")
+        print("The first user query will perform a more thorough check via the RAG chain.")
     except Exception as e:
         print(f"\n!!! ERROR: Failed to initialize Ollama model '{OLLAMA_MODEL_NAME}'.")
         print(f"!!! Please ensure the Ollama server is running at {OLLAMA_BASE_URL}.")
         print(f"!!! And that the model '{OLLAMA_MODEL_NAME}' is downloaded (run 'ollama pull {OLLAMA_MODEL_NAME}').")
+        print(f"!!! Also ensure your Ollama server is configured to use your GPU.")
         print(f"!!! Specific error: {e}")
         # Decide whether to exit or allow the app to start but fail on queries.
         # Allowing it to start might be useful for debugging other parts.
@@ -394,7 +422,7 @@ if __name__ == "__main__":
     host = os.environ.get("FLASK_HOST", "0.0.0.0")
     port = int(os.environ.get("FLASK_PORT", 5000))
     # Debug mode should be False in production
-    debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true" 
-    
+    debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+
     print(f"Starting Flask app on http://{host}:{port}/ (debug: {debug})")
-    app.run(host=host, port=port, debug=debug, use_reloader=False) # use_reloader=False often needed with LlamaCpp/Ollama
+    app.run(host=host, port=port, debug=debug, use_reloader=False) # use_reloader=False often needed with models
